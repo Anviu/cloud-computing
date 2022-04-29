@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Static Website</title>
+</head>
+<body>
+	<h1>Hello World!</h1>
+  <button type="button" onclick="callApi()">Click Me!</button>
+
+  <p id="response">This is a demonstration.</p>
+
+  <hr></hr>
+  <input type="text" id="input_text">Type me</input>
+  <button type="button" onclick="callApiRW()">Send</button>
+
+  <p id="response_rw">This is a demonstration.</p>
+
+  <hr></hr>
+  <input type="file" id="input_file" accept=".png,.jpg,.jpeg"></input>
+  <button type="button" onclick="callApiRWFile()">Send</button>
+
+
+  <p id="response_file">This is a demonstration.</p>
+
+  <hr></hr>
+  <input type="file" id="input_file_async" accept=".pdf,.png,.jpg,.jpeg"></input>
+  <button type="button" onclick="callApiRWFileAsync()">Send Async</button>
+
+
+  <p id="response_file_async">This is a demonstration Async.</p>
+
+<script src="./cfg.js" id="cfg"></script>
+<script>
+  let base = data.api_root;
+
+  async function callApi() { 
+    let url = base + "test";
+    fetch(url, {
+      method: 'GET'
+    }).then(function(response) {
+      return response.json();
+    }).then(function(data) {
+      console.log(data.message); 
+      document.getElementById("response").innerHTML = data.message;
+    });
+  }
+
+  async function callApiRW() { 
+    let url = base + "readwrite";
+    let text = document.getElementById("input_text").value;
+    fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        'data': text
+      }),
+    }).then(function(response) {
+      return response.json();
+    }).then(function(data) {
+      console.log(data.message); 
+      document.getElementById("response_rw").innerHTML = data.message;
+    });
+  }
+
+  // 64 encoder
+  const toBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+    });
+
+  // Function for sync textract functions for only image data, png, jpg, jpeg
+  async function callApiRWFile() { 
+    document.getElementById("response_file").innerHTML = "Working...";
+    let url = base + "readwritefile";
+    let file = document.getElementById("input_file").files[0];
+    let response_key = "";
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const result = await toBase64(file).catch(e => Error(e));
+    if(result instanceof Error) {
+      console.log('Error: ', result.message);
+      return;
+    }
+    fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        'data': result,
+        'type': file.type
+      }),
+    }).then(function(response) {
+      return response.json();
+    }).then(function(data) {
+      let key = data.message;
+      let pdf_url = "https://s3.eu-central-1.amazonaws.com/pdf-bucket.example.com/" + key.key
+      document.getElementById("response_file").innerHTML = "<a href="+pdf_url+" download='Result.pdf' target='_blank' rel='noopener noreferrer'>Download Results</a>";
+    });
+  }
+
+  // Uploads the file first to s3 and calls next function for triggering textract api
+  async function callApiRWFileAsync() { 
+    document.getElementById("response_file_async").innerHTML = "Working...";
+    let url = base + "s3upld";
+    let file = document.getElementById("input_file_async").files[0];
+    let response_key = "";
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const result = await toBase64(file).catch(e => Error(e));
+    if(result instanceof Error) {
+      console.log('Error: ', result.message);
+      return;
+    } 
+    fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        'data': result,
+        'type': file.type
+      }),
+    }).then(function(response) {
+      return response.json();
+    }).then(function(response) {
+      callApiTextract(response.key)
+    });
+  }
+
+  // Function for async textract call, for pdf and image files 
+  async function callApiTextract(key) {
+    console.log(key)
+    let readwrite_url = base + "readwritefileasync";
+    let bucketname = "img-bucket.example.com";
+    fetch(readwrite_url, {
+        method: 'POST',
+        body: JSON.stringify({
+          'bucket': bucketname,
+          'key': key
+        }),
+      }).then(function(response) {
+        return response.json();
+      }).then(function(data) {
+        console.log(data.message); 
+        let key = data.message;
+        let pdf_url = "https://s3.eu-central-1.amazonaws.com/pdf-bucket.example.com/" + key.key
+        document.getElementById("response_file_async").innerHTML = "<a href="+pdf_url+" download='Result.pdf' target='_blank' rel='noopener noreferrer'>Download Results</a>";
+      })
+  }
+</script>
+</body>
+</html>
